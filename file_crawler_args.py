@@ -1,15 +1,14 @@
 import argparse
+import logging
 import os
 import re
 import sre_constants
 
-from file_crawler_base import FileCrawlerBase
 
-
-class FileCrawlerArgs(FileCrawlerBase):
+class FileCrawlerArgs:
     def __init__(self):
-        FileCrawlerBase.__init__(self, __name__)
         parser = self.create_parser()
+        self.logger = logging.getLogger('file_crawler.' + __name__)
         self.args = parser.parse_args()
 
     # Custom arg type to convert into an absolute path
@@ -38,5 +37,7 @@ class FileCrawlerArgs(FileCrawlerBase):
                             help='whether to include hidden files & directories. defaults to False.')
         parser.add_argument('-f', '--follow-symlinks', action='store_const', default=False, const=True,
                             help='whether to follow symlinks. defaults to False.')
+        parser.add_argument('-v', '--verbose', action='store_const', default=False, const=True,
+                            help='whether to decrease the log level from INFO to DEBUG. defaults to False.')
 
         return parser
