@@ -81,7 +81,12 @@ class FileCrawler:
     def _should_exclude(self, name, full_path, is_file):
         exclude = False
 
-        if not self.args.include_hidden and name.startswith('.'):
+        if not is_file and self.results[full_path]:
+            self.logger.warn("Already processed {0}, most likely due to an infinite loop of symbolic links"
+                             .format(full_path))
+            exclude = True
+
+        elif not self.args.include_hidden and name.startswith('.'):
             self.logger.debug("Ignoring hidden file/directory {0}".format(full_path))
             exclude = True
 
