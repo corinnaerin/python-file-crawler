@@ -3,7 +3,7 @@ import logging
 import os
 import re
 import sre_constants
-
+from glob import glob
 
 class FileCrawlerArgs:
     def __init__(self):
@@ -33,11 +33,17 @@ class FileCrawlerArgs:
         parser = argparse.ArgumentParser(description='Search directory for matching files')
         parser.add_argument('root_dir', type=self.directory, help='root directory to search')
         parser.add_argument('keyword', type=self.regexp, help='keyword (regular expression) to search for')
-        parser.add_argument('-i', '--include-hidden', action='store_const', default=False, const=True,
+        parser.add_argument('-d', '--include-hidden', action='store_const', default=False, const=True,
                             help='whether to include hidden files & directories. defaults to False.')
         parser.add_argument('-f', '--follow-symlinks', action='store_const', default=False, const=True,
                             help='whether to follow symlinks. defaults to False.')
         parser.add_argument('-v', '--verbose', action='store_const', default=False, const=True,
                             help='whether to decrease the log level from INFO to DEBUG. defaults to False.')
+        parser.add_argument('-i', '--include',
+                            help='glob pattern for files & directories that should be included. If specified, nothing '
+                                 'that doesn\'t match this glob will be included.')
+        parser.add_argument('-e', '--exclude',
+                            help='glob pattern for files & directories that should be excluded. Can be used in '
+                                 'conjunction with --include to narrow down further.')
 
         return parser

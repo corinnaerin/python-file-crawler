@@ -5,6 +5,7 @@ from os import walk
 from os.path import join
 from pprint import pformat
 from re import MULTILINE
+from fnmatch import fnmatch
 
 from binaryornot.check import is_binary
 
@@ -68,7 +69,7 @@ class FileCrawler:
         if num_ignored > 0:
             self.logger.warn("{0} files/directories were ignored. Run with --verbose to see the full details"
                              .format(num_ignored))
-            self.logger.debug("All ignored files:\n" + pformat(self.ignored))
+            self.logger.debug("All ignored files/directories:\n" + pformat(self.ignored))
 
         self.logger.info("Done! Final result:\n" + pformat(self.results))
 
@@ -84,9 +85,18 @@ class FileCrawler:
             self.logger.debug("Ignoring hidden file/directory {0}".format(full_path))
             exclude = True
 
-        elif is_file and is_binary(full_path):
-            self.logger.debug("Ignoring binary file {0}".format(full_path))
-            exclude = True
+        elif is_file:
+            if is_binary(full_path):
+                self.logger.debug("Ignoring binary file {0}".format(full_path))
+                exclude = True
+
+            elif self.args.include and not fnmatch(full_path, self.args.include):
+                self.logger.debug("Ignoring file {0} that does not match include glob".format(full_path))
+                exclude = True
+
+            elif self.args.exclude and fnmatch(full_path, self.args.exclude):
+                self.logger.debug("Ignoring file {0} that matches exclude glob".format(full_path))
+                exclude = True
 
         if exclude:
             self.ignored.append(full_path)
