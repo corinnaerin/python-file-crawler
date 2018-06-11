@@ -1,12 +1,12 @@
 import logging
 from os import walk
 
-from file_crawler_args import FileCrawlerArgs
-from file_crawler_dir_thread import FileCrawlerDirThread
-from file_crawler_file_thread import FileCrawlerFileThread
-from file_crawler_inputs import FileCrawlerInputs
-from file_crawler_results import FileCrawlerResults
-from timer import Timer
+from lib.file_crawler_args import FileCrawlerArgs
+from lib.file_crawler_dir_thread import FileCrawlerDirThread
+from lib.file_crawler_file_thread import FileCrawlerFileThread
+from lib.file_crawler_inputs import FileCrawlerInputs
+from lib.file_crawler_results import FileCrawlerResults
+from lib.timer import Timer
 
 MAX_THREADS = 30
 LOGGING_FORMAT = '%(asctime)s [%(levelname)s] [%(name)s] [%(threadName)s] %(message)s'
