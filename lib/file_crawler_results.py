@@ -1,66 +1,53 @@
 import logging
 from os import path
 from pprint import pformat
-from threading import Lock
 
 
 class FileCrawlerResults:
-    def __init__(self):
+    def __init__(self, log_level):
+        self.__logger = logging.getLogger('file_crawler.FileCrawlerResults')
+        # For some reason, the level isn't being inherited from the parent logger,
+        # even though the formatter & handler are.... weird
+        self.__logger.setLevel(log_level)
         self.__results = dict()
-        self.__errors = []
-        self.__ignored = []
         self.file_count = 0
-        self.__results_lock = Lock()
-
-    def lock(self):
-        self.__results_lock.acquire()
-
-    def release(self):
-        self.__results_lock.release()
+        self.__errors = list()
+        self.__ignored = list()
 
     def add_directory(self, dir_name):
-        self.lock()
         self.__results[dir_name] = 0
-        self.release()
 
     def has_directory(self, dir_name):
-        self.lock()
-        has_dir = dir_name in self.__results
-        self.release()
-        return has_dir
+        return dir_name in self.__results
 
-    def log_file(self, file_path, match):
-        self.lock()
-        self.file_count = self.file_count + 1
-        if match:
-            dir_name = path.dirname(file_path)
-            count = self.__results[dir_name] + 1
-            self.__results[dir_name] = count
-        self.release()
+    def log_match(self, file_path):
+        dir_name = path.dirname(file_path)
+        count = self.__results[dir_name] + 1
+        self.__results[dir_name] = count
+
+    def increment_counter(self):
+        self.file_count += 1
+
+    def get_file_count(self):
+        return self.file_count
 
     def log_error(self, file_path):
-        self.lock()
         self.__errors.append(file_path)
-        self.release()
 
     def log_ignored(self, file_path):
-        self.lock()
         self.__ignored.append(file_path)
-        self.release()
 
     def dump(self):
-        self.lock()
         num_errors = len(self.__errors)
         if num_errors > 0:
-            logging.warn("{0} files could not be read. Run with --version to see the full details."
-                         .format(num_errors))
-            logging.info("All errored files:\n" + pformat(self.__errors))
+            self.__logger.warn("%d files could not be read. Run with --version to see the full details."
+                               % num_errors)
+            self.__logger.debug("All errored files:\n" + pformat(self.__errors))
 
         num_ignored = len(self.__ignored)
         if num_ignored > 0:
-            logging.warn("{0} files/directories were ignored. Run with --verbose to see the full details"
-                         .format(num_ignored))
-            logging.info("All ignored files/directories:\n" + pformat(self.__ignored))
+            self.__logger.warn("%d files/directories were ignored. Run with --verbose to see the full details"
+                               % num_ignored)
+            self.__logger.debug("All ignored files/directories:\n" + pformat(self.__ignored))
 
-        logging.info("Results:\n" + pformat(self.__results))
-        self.release()
+        self.__logger.info("Results:\n" + pformat(self.__results))

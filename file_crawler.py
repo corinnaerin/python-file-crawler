@@ -1,48 +1,86 @@
 import logging
+from multiprocessing import freeze_support
+from multiprocessing.managers import SyncManager
 from os import walk
 
-from lib.file_crawler_args import FileCrawlerArgs
-from lib.file_crawler_dir_thread import FileCrawlerDirThread
-from lib.file_crawler_file_thread import FileCrawlerFileThread
-from lib.file_crawler_inputs import FileCrawlerInputs
+from lib.file_crawler_args import get_cli_args
+from lib.file_crawler_dir_process import FileCrawlerDirProcess
+from lib.file_crawler_file_process import FileCrawlerFileProcess
+from lib.file_crawler_filter_util import filter_excluded_in_place
 from lib.file_crawler_results import FileCrawlerResults
 from lib.timer import Timer
 
-MAX_THREADS = 30
-LOGGING_FORMAT = '%(asctime)s [%(levelname)s] [%(name)s] [%(threadName)s] %(message)s'
+MAX_PROCESSES = 30
+LOGGING_FORMAT = '%(asctime)s [%(levelname)s] [%(processName)s] %(message)s'
+
+
+class FileCrawlerManager(SyncManager):
+    pass
+
+
+FileCrawlerManager.register('FileCrawlerResults', FileCrawlerResults)
 
 
 class FileCrawler:
+
     def __init__(self):
+        if __name__ == '__main__':
+            # For Windows support
+            freeze_support()
 
-        self.__cli_args = FileCrawlerArgs().args
+            # Create logger
+            self.__logger = logging.getLogger('file_crawler')
+            self.__logger.setLevel(logging.INFO)
+            logging_handler = logging.StreamHandler()
+            logging_formatter = logging.Formatter('%(asctime)s [%(levelname)s] [%(processName)s] %(message)s')
+            logging_handler.setFormatter(logging_formatter)
+            self.__logger.addHandler(logging_handler)
 
-        # Create our logging instance
-        logging_level = logging.INFO
-        if self.__cli_args.verbose:
-            logging_level = logging.DEBUG
-        logging.basicConfig(level=logging_level,
-                            format=LOGGING_FORMAT)
+            self.__manager = FileCrawlerManager()
+            self.__manager.start()
 
-        self.__timer = Timer(start_message="Starting to scan %s for files matching %s" %
-                                           (self.__cli_args.root_dir, self.__cli_args.keyword.pattern))
+            # Create process-safe args object
+            self.__cli_args = get_cli_args(self.__manager)
 
-        self.results = FileCrawlerResults()
-        self.threads = []
-        self.__inputs = FileCrawlerInputs(self.__cli_args)
+            if self.__cli_args.verbose:
+                self.__logger.setLevel(logging.DEBUG)
 
-        self._create_threads()
+            self.__timer = Timer(start_message="Starting to scan %s for files matching %s" %
+                                               (self.__cli_args.root_dir, self.__cli_args.keyword.pattern))
+
+            self.__dir_queue = self.__manager.Queue()
+            self.__file_queue = self.__manager.Queue()
+
+            self.__results = self.__manager.FileCrawlerResults(self.__logger.getEffectiveLevel())
+
+            self.__processes = list()
+            self._create_processes()
 
     # Returns an object hash from directory name to the number of files that match the keyword
     def get_results(self):
 
+        self._fill_dir_queue()
+
+        # Wait for all files & directories in the queues to be processed
+        self.__dir_queue.join()
+        self.__file_queue.join()
+
+        for process in self.__processes:
+            process.terminate()
+
+        self.__results.dump()
+        self.__timer.stop("Finished scanning %d files" % self.__results.get_file_count())
+        return self.__results
+
+    def _fill_dir_queue(self):
         # Recursively walk through all of the files & directories in the root
-        logging.debug("Starting to fill the queue with all of the files")
+        self.__logger.debug("Starting to fill the queue with all of the directories")
 
         for current_dir, dirs, files in walk(self.__cli_args.root_dir, followlinks=self.__cli_args.follow_symlinks):
-            self.results.add_directory(current_dir)
+            self.__logger.debug("Adding directory %s" % current_dir)
 
-            self.__inputs.dir_queue.put({
+            self.__results.add_directory(current_dir)
+            self.__dir_queue.put({
                 'dir_name': current_dir,
                 'files': files
             })
@@ -52,26 +90,18 @@ class FileCrawler:
             # in the current directory. It's also used by walk() to continue recursing. So you can remove
             # directories from the list to prevent it from stepping into them. But it does make for a call pattern
             # that's somewhat difficult to follow
-            self.__inputs.filter_hidden_dirs(current_dir, dirs, self.results)
+            filter_excluded_in_place(self.__cli_args, current_dir, dirs, False, self.__results)
 
-        # Wait for all files in the queue to be processed
-        self.__inputs.file_queue.join()
-        self.__inputs.dir_queue.join()
+    def _create_processes(self):
+        for i in range(MAX_PROCESSES / 2):
+            file_process = FileCrawlerFileProcess(self.__cli_args.keyword, self.__file_queue, self.__results)
+            file_process.start()
+            self.__processes.append(file_process)
 
-        self.results.dump()
-        self.__timer.stop("Finished scanning %d files" % self.results.file_count)
-        logging.shutdown()
-        return self.results
-
-    def _create_threads(self):
-        for i in range(MAX_THREADS / 2):
-            file_thread = FileCrawlerFileThread(self.__cli_args.keyword, self.__inputs.file_queue, self.results)
-            file_thread.daemon = True
-            file_thread.start()
-            self.threads.append(file_thread)
-            dir_thread = FileCrawlerDirThread(self.__inputs, self.results)
-            dir_thread.daemon = True
-            dir_thread.start()
+            dir_process = FileCrawlerDirProcess(self.__cli_args, self.__dir_queue,
+                                                self.__file_queue, self.__results)
+            dir_process.start()
+            self.__processes.append(dir_process)
 
 
 file_crawler = FileCrawler()

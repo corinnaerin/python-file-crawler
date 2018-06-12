@@ -1,13 +1,14 @@
 import errno
 import logging
-import threading
+from multiprocessing import Process
 from re import MULTILINE
 
 
-class FileCrawlerFileThread(threading.Thread):
+class FileCrawlerFileProcess(Process):
     def __init__(self, re, file_queue, results):
-        threading.Thread.__init__(self)
+        Process.__init__(self)
 
+        self.__logger = logging.getLogger('file_crawler.FileCrawlerFileProcess')
         self.__re = re
         self.__file_queue = file_queue
         self.__results = results
@@ -20,17 +21,20 @@ class FileCrawlerFileThread(threading.Thread):
                 self.__file_queue.task_done()
 
     def _check_file(self, file_path):
-        logging.debug("Processing file %s" % file_path)
+        self.__logger.debug("Processing file %s" % file_path)
         try:
             fp = open(file_path)
+
         except IOError as e:
             # If there's a problem opening the file, we don't want to fail the entire request.
             if e.errno == errno.EACCES:
-                logging.exception("Skipping {0} due to a permissions error".format(file_path))
-            logging.exception("Unable to open {0}".format(file_path))
+                self.__logger.exception("Skipping %s due to a permissions error" % file_path)
+            self.__logger.exception("Unable to open %s" % file_path)
             self.__results.log_error(file_path)
+
         else:
             with fp:
+
                 file_contents = fp.read()
                 # Don't even have to bother manually iterating over each line individually, since
                 # we can just do a multiline regex search. Using search() instead of match() here
@@ -39,8 +43,9 @@ class FileCrawlerFileThread(threading.Thread):
                 match = self.__re.search(file_contents, MULTILINE)
 
                 if match:
-                    logging.debug("Found match in {0}".format(file_path))
+                    self.__logger.debug("Found match in {0}".format(file_path))
+                    self.__results.log_match(file_path)
 
-                self.__results.log_file(file_path, match)
+                self.__results.increment_counter()
 
-        logging.debug("Done file processing %s" % file_path)
+            self.__logger.debug("Done processing file %s" % file_path)
