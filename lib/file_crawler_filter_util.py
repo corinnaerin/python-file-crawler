@@ -1,6 +1,6 @@
 import logging
 from fnmatch import fnmatch
-from os.path import join
+from os.path import join, dirname
 
 from binaryornot.check import is_binary
 
@@ -11,31 +11,40 @@ logger = logging.getLogger('file_crawler.file_crawler_filter_util')
 def __should_exclude(cli_args, name, full_path, is_file, results):
     exclude = False
 
-    if not is_file and results and results.has_directory(full_path):
+    label = 'file'
+    if not is_file:
+        label = 'directory'
+
+    if not cli_args.include_hidden and name.startswith('.'):
+        logger.debug("Ignoring hidden %s %s" % (label, full_path))
+        exclude = True
+
+    elif not is_file and results.has_directory(full_path):
         logger.warn("Already processed %s, most likely due to an infinite loop of symbolic links" % full_path)
         exclude = True
 
-    elif not cli_args.include_hidden and name.startswith('.'):
-        logger.debug("Ignoring hidden file/directory {0}".format(full_path))
+    elif is_file and is_binary(full_path):
+        logger.debug("Ignoring binary file %s" % full_path)
         exclude = True
 
-    elif is_file:
-        if is_binary(full_path):
-            logger.debug("Ignoring binary file {0}".format(full_path))
-            exclude = True
+    elif cli_args.include and not check_pattern(full_path, cli_args.include, is_file):
+        logger.debug("Ignoring %s %s that does not match include glob" % (label, full_path))
+        exclude = True
 
-        if cli_args.include and not fnmatch(full_path, cli_args.include):
-            logger.debug("Ignoring file {0} that does not match include glob".format(full_path))
-            exclude = True
-
-        elif cli_args.exclude and fnmatch(full_path, cli_args.exclude):
-            logger.debug("Ignoring file {0} that matches exclude glob".format(full_path))
-            exclude = True
+    elif cli_args.exclude and check_pattern(full_path, cli_args.exclude, is_file):
+        logger.debug("Ignoring %s %s that matches exclude glob" % (label, full_path))
+        exclude = True
 
     if exclude:
         results.log_ignored(full_path)
 
     return exclude
+
+
+def check_pattern(full_path, pattern, is_file):
+    if is_file:
+        return fnmatch(full_path, pattern)
+    return fnmatch(full_path, dirname(pattern))
 
 
 def exclude_generator(cli_args, current_dir, names, is_file, results):
