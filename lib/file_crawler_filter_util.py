@@ -4,8 +4,8 @@ from os.path import join, dirname
 
 from binaryornot.check import is_binary
 
-logger = logging.getLogger('file_crawler.file_crawler_filter_util')
-
+logger = logging.getLogger('file_crawler.' + __name__)
+logger.setLevel(logging.INFO)
 
 # checks whether the file / directory should be excluded from computation
 def __should_exclude(cli_args, name, full_path, is_file, results):
