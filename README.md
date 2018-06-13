@@ -1,3 +1,4 @@
+```
 usage: file_crawler.py [-h] [-d] [-f] [-v] [-i INCLUDE] [-e EXCLUDE]
                        root_dir keyword
 
@@ -27,3 +28,4 @@ optional arguments:
                         pattern for files & directories that should be
                         excluded. Can be used in conjunction with --include to
                         narrow down further.
+```
